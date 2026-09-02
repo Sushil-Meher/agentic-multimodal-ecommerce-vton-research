@@ -1,63 +1,8 @@
-import uuid
-
-import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import text
 
-from src.api.db import engine
 from src.api.main import app
 
 client = TestClient(app)
-
-
-@pytest.fixture
-def product_factory():
-    """Creates throwaway test products directly in the DB and cleans them up after."""
-    created_ids = []
-
-    def make(status="ACTIVE", price=None, **overrides):
-        sku = overrides.get("sku") or f"TEST-{uuid.uuid4().hex[:10].upper()}"
-        slug = overrides.get("public_slug") or sku.lower()
-        with engine.begin() as conn:
-            row = conn.execute(
-                text(
-                    """
-                    INSERT INTO catalog.products
-                        (sku, name, status, public_slug, primary_color, thread_count)
-                    VALUES
-                        (:sku, :name, :status, :slug, :color, :thread_count)
-                    RETURNING id
-                    """
-                ),
-                {
-                    "sku": sku,
-                    "name": overrides.get("name", "Test Saree"),
-                    "status": status,
-                    "slug": slug,
-                    "color": overrides.get("primary_color"),
-                    "thread_count": overrides.get("thread_count"),
-                },
-            ).one()
-            product_id = row.id
-            if price is not None:
-                conn.execute(
-                    text(
-                        "INSERT INTO commerce.product_prices (product_id, price) VALUES (:pid, :price)"
-                    ),
-                    {"pid": product_id, "price": price},
-                )
-        created_ids.append(product_id)
-        return sku
-
-    yield make
-
-    with engine.begin() as conn:
-        for product_id in created_ids:
-            conn.execute(
-                text("DELETE FROM commerce.product_prices WHERE product_id = :id"),
-                {"id": product_id},
-            )
-            conn.execute(text("DELETE FROM catalog.products WHERE id = :id"), {"id": product_id})
 
 
 def test_public_endpoint_hides_price(product_factory):
@@ -90,21 +35,67 @@ def test_get_product_not_found():
 
 
 def test_search_by_color(product_factory):
-    sku = product_factory(status="ACTIVE", primary_color="Testmagenta")
+    sku = product_factory(
+        status="ACTIVE", price=1000, inventory_status="AVAILABLE", primary_color="Testmagenta"
+    )
     resp = client.get("/products/search", params={"color": "testmagenta"})
     assert resp.status_code == 200
     assert sku in [p["sku"] for p in resp.json()]
 
 
-def test_search_by_max_thread_count(product_factory):
-    low_sku = product_factory(status="ACTIVE", thread_count=40)
-    high_sku = product_factory(status="ACTIVE", thread_count=200)
-    resp = client.get("/products/search", params={"max_thread_count": 50})
+def test_search_by_thread_count(product_factory):
+    match_sku = product_factory(
+        status="ACTIVE", price=1000, inventory_status="AVAILABLE", thread_count=120
+    )
+    other_sku = product_factory(
+        status="ACTIVE", price=1000, inventory_status="AVAILABLE", thread_count=80
+    )
+    resp = client.get("/products/search", params={"thread_count": 120})
     skus = [p["sku"] for p in resp.json()]
-    assert low_sku in skus
-    assert high_sku not in skus
+    assert match_sku in skus
+    assert other_sku not in skus
+
+
+def test_search_combines_multiple_filters(product_factory):
+    match_sku = product_factory(
+        status="ACTIVE",
+        price=1000,
+        inventory_status="AVAILABLE",
+        primary_color="Crimson",
+        occasion="Wedding",
+    )
+    wrong_occasion_sku = product_factory(
+        status="ACTIVE",
+        price=1000,
+        inventory_status="AVAILABLE",
+        primary_color="Crimson",
+        occasion="Casual",
+    )
+    resp = client.get("/products/search", params={"color": "crimson", "occasion": "wedding"})
+    skus = [p["sku"] for p in resp.json()]
+    assert match_sku in skus
+    assert wrong_occasion_sku not in skus
+
+
+def test_search_excludes_out_of_stock_by_default(product_factory):
+    sku = product_factory(status="ACTIVE", price=1000, inventory_status="SOLD")
+    resp = client.get("/products/search")
+    assert sku not in [p["sku"] for p in resp.json()]
+
+
+def test_search_no_matches_returns_empty_list(product_factory):
+    resp = client.get("/products/search", params={"color": "no-such-color-xyz"})
+    assert resp.status_code == 200
+    assert resp.json() == []
 
 
 def test_search_rejects_invalid_thread_count():
-    resp = client.get("/products/search", params={"max_thread_count": 0})
+    resp = client.get("/products/search", params={"thread_count": 0})
     assert resp.status_code == 422
+
+
+def test_search_endpoint_hides_price(product_factory):
+    sku = product_factory(status="ACTIVE", price=4321, inventory_status="AVAILABLE")
+    resp = client.get("/products/search")
+    match = next(p for p in resp.json() if p["sku"] == sku)
+    assert "price" not in match
