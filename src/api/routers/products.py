@@ -3,8 +3,9 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
 from ..db import get_connection
-from ..schemas import Product
+from ..schemas import Product, Recommendation
 from ...search.products import search_products as search_products_service
+from ...search.recommend import recommend_products as recommend_products_service
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -45,6 +46,34 @@ def search_products(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return rows
+
+
+@router.get("/recommendations", response_model=list[Recommendation])
+def recommend_products(
+    color: str | None = None,
+    bandha_type: str | None = None,
+    thread_count: int | None = Query(default=None, gt=0),
+    occasion: str | None = None,
+    fabric: str | None = None,
+    limit: int = Query(default=5, gt=0, le=20),
+    conn: Connection = Depends(get_connection),
+):
+    # same reasoning as /search: no public max_price, it would leak pricing
+    # information indirectly even without returning a price
+    try:
+        results = recommend_products_service(
+            conn,
+            color=color,
+            bandha_type=bandha_type,
+            thread_count=thread_count,
+            occasion=occasion,
+            fabric=fabric,
+            limit=limit,
+            include_price=False,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return results
 
 
 @router.get("/{sku}", response_model=Product)

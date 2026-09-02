@@ -28,3 +28,8 @@ class Product(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
+
+
+class Recommendation(Product):
+    score: float
+    reason: str
