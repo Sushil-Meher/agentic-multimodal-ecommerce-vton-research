@@ -5,3 +5,5 @@ psycopg[binary]
 pydantic-settings
 pytest
 httpx
+langgraph
+langchain-core
