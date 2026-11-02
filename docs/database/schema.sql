@@ -391,7 +391,8 @@ SELECT
     p.created_at,
     p.updated_at
 FROM catalog.products p
-WHERE p.status = 'ACTIVE';
+WHERE p.status = 'ACTIVE'
+  AND p.sku NOT LIKE 'EVAL-%'; -- evaluation-harness fixtures aren't real catalog products
 
 -- =========================
 -- SECURITY NOTES

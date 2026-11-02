@@ -78,6 +78,7 @@ def recommend_products(
     fabric: str | None = None,
     limit: int = 5,
     include_price: bool = True,
+    include_eval_fixtures: bool = False,
 ) -> list[dict]:
     """Search for candidates, then rank them. Meant to sit behind an agent
     tool later, same as search_products."""
@@ -92,6 +93,7 @@ def recommend_products(
         max_price=max_price,
         in_stock_only=True,
         include_price=True,
+        include_eval_fixtures=include_eval_fixtures,
     )
 
     ranked = rank_products(

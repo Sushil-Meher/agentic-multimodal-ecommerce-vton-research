@@ -1,0 +1,8 @@
+{
+  "name": "baseline_qwen3-8b",
+  "description": "First reproducible baseline for the sales agent evaluation harness.",
+  "llm_provider": "ollama",
+  "llm_model": "qwen3:8b",
+  "benchmark": "experiments/benchmarks/saree_shopping_v1.json",
+  "how_to_run": "set LLM_PROVIDER=ollama and LLM_MODEL=qwen3:8b (matches .env.example defaults), make sure `ollama pull qwen3:8b` has been run, then: python -m src.evaluation.cli"
+}

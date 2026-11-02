@@ -1,6 +1,10 @@
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
+# evaluation-harness fixtures use this SKU prefix (see experiments/); never
+# real catalog products, so callers must opt in to see them
+EVAL_FIXTURE_SKU_PREFIX = "EVAL-"
+
 # columns every caller gets; price/currency are added only when asked for
 _BASE_COLUMNS = """
     p.id, p.sku, p.name, p.description, p.category, p.fabric,
@@ -30,6 +34,7 @@ def search_products(
     fabric: str | None = None,
     in_stock_only: bool = True,
     include_price: bool = True,
+    include_eval_fixtures: bool = False,
 ) -> list[dict]:
     """Reusable product search. Meant to be called from the API layer today
     and directly from an agent tool later, so filters stay simple keyword
@@ -70,6 +75,9 @@ def search_products(
         params["fabric"] = fabric
     if in_stock_only:
         clauses.append(_AVAILABLE_EXISTS)
+    if not include_eval_fixtures:
+        clauses.append("p.sku NOT LIKE :eval_prefix")
+        params["eval_prefix"] = f"{EVAL_FIXTURE_SKU_PREFIX}%"
 
     columns = _BASE_COLUMNS + (", pr.price, pr.currency" if include_price else "")
 

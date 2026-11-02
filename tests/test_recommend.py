@@ -107,6 +107,30 @@ def test_include_price_false_excludes_price_field(product_factory):
     assert "price" not in result
 
 
+def test_recommend_eval_fixture_excluded_by_default(product_factory):
+    sku = product_factory(
+        status="ACTIVE", price=1000, inventory_status="AVAILABLE",
+        sku="EVAL-TEST-0003", primary_color="Maroon",
+    )
+
+    with engine.connect() as conn:
+        results = recommend_products(conn, color="Maroon")
+
+    assert sku not in [r["sku"] for r in results]
+
+
+def test_recommend_eval_fixture_included_when_requested(product_factory):
+    sku = product_factory(
+        status="ACTIVE", price=1000, inventory_status="AVAILABLE",
+        sku="EVAL-TEST-0004", primary_color="Maroon",
+    )
+
+    with engine.connect() as conn:
+        results = recommend_products(conn, color="Maroon", include_eval_fixtures=True)
+
+    assert sku in [r["sku"] for r in results]
+
+
 def test_recommendations_endpoint_hides_price(product_factory):
     sku = product_factory(
         status="ACTIVE", price=4321, inventory_status="AVAILABLE", occasion="Wedding"

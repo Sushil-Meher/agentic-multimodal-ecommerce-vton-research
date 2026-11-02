@@ -99,3 +99,22 @@ def test_search_endpoint_hides_price(product_factory):
     resp = client.get("/products/search")
     match = next(p for p in resp.json() if p["sku"] == sku)
     assert "price" not in match
+
+
+def test_eval_fixture_never_appears_in_public_endpoints(product_factory):
+    sku = product_factory(
+        status="ACTIVE", price=1000, inventory_status="AVAILABLE",
+        sku="EVAL-TEST-0005", primary_color="Maroon", occasion="Wedding",
+    )
+
+    list_resp = client.get("/products")
+    assert sku not in [p["sku"] for p in list_resp.json()]
+
+    detail_resp = client.get(f"/products/{sku}")
+    assert detail_resp.status_code == 404
+
+    search_resp = client.get("/products/search", params={"color": "Maroon"})
+    assert sku not in [p["sku"] for p in search_resp.json()]
+
+    recommend_resp = client.get("/products/recommendations", params={"occasion": "Wedding"})
+    assert sku not in [p["sku"] for p in recommend_resp.json()]

@@ -126,6 +126,37 @@ def test_product_details_request(product_factory):
     assert payload["price"] == 2500
 
 
+def test_ollama_style_recommendation_flow(product_factory):
+    # ChatOllama returns tool calls in the same AIMessage.tool_calls shape
+    # as every other LangChain chat model, so FakeLLM here stands in for
+    # a real local Qwen3-8B call without needing Ollama running for tests.
+    sku = product_factory(
+        status="ACTIVE",
+        price=4500,
+        inventory_status="AVAILABLE",
+        primary_color="Maroon",
+        occasion="Wedding",
+    )
+
+    llm = FakeLLM(
+        [
+            _tool_call("recommend_products", {"color": "Maroon", "occasion": "Wedding", "max_price": 5000}),
+            AIMessage(content="The maroon wedding saree fits your budget."),
+        ]
+    )
+    graph = build_graph(llm=llm)
+
+    result = graph.invoke(
+        {"messages": [HumanMessage(content="maroon saree for a wedding, budget 5000")]}
+    )
+    messages = result["messages"]
+
+    tool_message = next(m for m in messages if isinstance(m, ToolMessage))
+    payload = json.loads(tool_message.content)
+    assert any(p["sku"] == sku for p in payload)
+    assert messages[-1].content == "The maroon wedding saree fits your budget."
+
+
 def test_invalid_tool_input_returns_error_payload_not_a_crash():
     payload = json.loads(search_products.invoke({"thread_count": -5}))
     assert "error" in payload
@@ -139,6 +170,30 @@ def test_no_result_response():
 def test_get_product_details_unknown_sku_returns_error():
     payload = json.loads(get_product_details.invoke({"sku": "DOES-NOT-EXIST"}))
     assert "error" in payload
+
+
+def test_agent_tool_excludes_eval_fixture_by_default(product_factory, monkeypatch):
+    monkeypatch.delenv("AGENT_INCLUDE_EVAL_FIXTURES", raising=False)
+    sku = product_factory(
+        status="ACTIVE", price=1000, inventory_status="AVAILABLE",
+        sku="EVAL-TEST-0006", primary_color="Maroon",
+    )
+
+    payload = json.loads(search_products.invoke({"color": "Maroon"}))
+
+    assert sku not in [p["sku"] for p in payload]
+
+
+def test_agent_tool_includes_eval_fixture_when_enabled(product_factory, monkeypatch):
+    monkeypatch.setenv("AGENT_INCLUDE_EVAL_FIXTURES", "1")
+    sku = product_factory(
+        status="ACTIVE", price=1000, inventory_status="AVAILABLE",
+        sku="EVAL-TEST-0007", primary_color="Maroon",
+    )
+
+    payload = json.loads(search_products.invoke({"color": "Maroon"}))
+
+    assert sku in [p["sku"] for p in payload]
 
 
 def test_tool_list_has_no_raw_sql_tool():

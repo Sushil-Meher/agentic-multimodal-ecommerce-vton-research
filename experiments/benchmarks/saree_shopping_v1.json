@@ -1,0 +1,389 @@
+{
+  "version": "v1",
+  "description": "Sambalpuri saree shopping benchmark for the LangGraph sales agent. Grounded in the EVAL-0001..EVAL-0008 fixture catalog (see experiments/benchmarks/seed_eval_catalog.sql), not the real SAM-2026 business products.",
+  "cases": [
+    {
+      "id": "discovery_001",
+      "category": "product_discovery",
+      "query": "What kind of sarees do you have?",
+      "expects_tool_call": true,
+      "expected_tool": ["search_products", "recommend_products"],
+      "expected_constraints": null,
+      "notes": "Open-ended discovery, no specific filter implied."
+    },
+    {
+      "id": "discovery_002",
+      "category": "product_discovery",
+      "query": "Show me your Sambalpuri saree collection.",
+      "expects_tool_call": true,
+      "expected_tool": ["search_products", "recommend_products"],
+      "expected_constraints": null,
+      "notes": "Same as discovery_001, different phrasing."
+    },
+    {
+      "id": "discovery_003",
+      "category": "product_discovery",
+      "query": "Can you show me some sarees?",
+      "expects_tool_call": true,
+      "expected_tool": ["search_products", "recommend_products"],
+      "expected_constraints": null,
+      "notes": "Same as discovery_001, different phrasing."
+    },
+    {
+      "id": "occasion_001",
+      "category": "occasion",
+      "query": "I need a saree for a wedding.",
+      "expects_tool_call": true,
+      "expected_tool": ["search_products", "recommend_products"],
+      "expected_constraints": {"occasion": "Wedding"},
+      "notes": "Matches EVAL-0001, EVAL-0004, EVAL-0007 (EVAL-0007 is SOLD)."
+    },
+    {
+      "id": "occasion_002",
+      "category": "occasion",
+      "query": "Do you have anything for a festival?",
+      "expects_tool_call": true,
+      "expected_tool": ["search_products", "recommend_products"],
+      "expected_constraints": {"occasion": "Festival"},
+      "notes": "Matches EVAL-0002, EVAL-0003, EVAL-0005, EVAL-0008 (EVAL-0008 is RESERVED)."
+    },
+    {
+      "id": "occasion_003",
+      "category": "occasion",
+      "query": "I want something for a casual day out.",
+      "expects_tool_call": true,
+      "expected_tool": ["search_products", "recommend_products"],
+      "expected_constraints": {"occasion": "Casual"},
+      "notes": "Matches EVAL-0006 only."
+    },
+    {
+      "id": "color_001",
+      "category": "color",
+      "query": "Do you have maroon sarees?",
+      "expects_tool_call": true,
+      "expected_tool": ["search_products", "recommend_products"],
+      "expected_constraints": {"color": "Maroon"},
+      "notes": "Matches EVAL-0001 (available) and EVAL-0007 (sold)."
+    },
+    {
+      "id": "color_002",
+      "category": "color",
+      "query": "Show me black sarees.",
+      "expects_tool_call": true,
+      "expected_tool": ["search_products", "recommend_products"],
+      "expected_constraints": {"color": "Black"},
+      "notes": "Matches EVAL-0002."
+    },
+    {
+      "id": "color_003",
+      "category": "color",
+      "query": "I like blue, do you have any sarees in that color?",
+      "expects_tool_call": true,
+      "expected_tool": ["search_products", "recommend_products"],
+      "expected_constraints": {"color": "Blue"},
+      "notes": "Matches EVAL-0006."
+    },
+    {
+      "id": "fabric_001",
+      "category": "fabric",
+      "query": "Do you have any silk sarees?",
+      "expects_tool_call": true,
+      "expected_tool": ["search_products", "recommend_products"],
+      "expected_constraints": {"fabric": "Silk"},
+      "notes": "Matches EVAL-0004 (available) and EVAL-0007 (sold)."
+    },
+    {
+      "id": "fabric_002",
+      "category": "fabric",
+      "query": "I prefer cotton sarees.",
+      "expects_tool_call": true,
+      "expected_tool": ["search_products", "recommend_products"],
+      "expected_constraints": {"fabric": "Cotton"},
+      "notes": "Matches EVAL-0001, 0002, 0003, 0005, 0006, 0008."
+    },
+    {
+      "id": "fabric_003",
+      "category": "fabric",
+      "query": "Any pure silk options for a wedding?",
+      "expects_tool_call": true,
+      "expected_tool": ["search_products", "recommend_products"],
+      "expected_constraints": {"fabric": "Silk", "occasion": "Wedding"},
+      "notes": "Matches EVAL-0004 (available) and EVAL-0007 (sold)."
+    },
+    {
+      "id": "bandha_001",
+      "category": "bandha_motif",
+      "query": "Do you have Pasapalli Bandha sarees?",
+      "expects_tool_call": true,
+      "expected_tool": ["search_products", "recommend_products"],
+      "expected_constraints": {"bandha_type": "Pasapalli Bandha"},
+      "notes": "Matches EVAL-0004."
+    },
+    {
+      "id": "bandha_002",
+      "category": "bandha_motif",
+      "query": "I want a saree with Rudraksha Bandha weaving.",
+      "expects_tool_call": true,
+      "expected_tool": ["search_products", "recommend_products"],
+      "expected_constraints": {"bandha_type": "Rudraksha Bandha"},
+      "notes": "Only EVAL-0007 has this bandha_type and it is SOLD, so a default in-stock search should come back empty even with a correct argument."
+    },
+    {
+      "id": "bandha_003",
+      "category": "bandha_motif",
+      "query": "Do you have anything with a Shankha motif?",
+      "expects_tool_call": true,
+      "expected_tool": ["search_products", "recommend_products", "get_product_details"],
+      "expected_constraints": null,
+      "capability_gap": true,
+      "notes": "Neither search_products nor recommend_products currently exposes a motif filter (only bandha_type), so argument correctness is not gradable here. This case documents that gap rather than testing exact matching."
+    },
+    {
+      "id": "thread_001",
+      "category": "thread_count",
+      "query": "I want a saree with 100 count thread.",
+      "expects_tool_call": true,
+      "expected_tool": ["search_products", "recommend_products"],
+      "expected_constraints": {"thread_count": 100},
+      "notes": "Matches EVAL-0002, EVAL-0005 (available) and EVAL-0008 (reserved)."
+    },
+    {
+      "id": "thread_002",
+      "category": "thread_count",
+      "query": "Do you have anything with 120 thread count?",
+      "expects_tool_call": true,
+      "expected_tool": ["search_products", "recommend_products"],
+      "expected_constraints": {"thread_count": 120},
+      "notes": "Matches EVAL-0001 (available) and EVAL-0007 (sold)."
+    },
+    {
+      "id": "thread_003",
+      "category": "thread_count",
+      "query": "What's your highest thread count saree?",
+      "expects_tool_call": true,
+      "expected_tool": ["search_products", "recommend_products"],
+      "expected_constraints": null,
+      "capability_gap": true,
+      "notes": "No tool supports a 'highest/max' query directly; the agent must fetch a broad list and reason over it. Highest available thread_count in the catalog is EVAL-0004 at 140."
+    },
+    {
+      "id": "budget_001",
+      "category": "budget",
+      "query": "I have a budget of 5000, what can you show me?",
+      "expects_tool_call": true,
+      "expected_tool": "recommend_products",
+      "expected_constraints": {"max_price": 5000},
+      "notes": "Only recommend_products exposes a price filter (max_price); search_products has none. Matches EVAL-0001, 0003, 0005, 0006 (and EVAL-0002 at 5200 is just over budget)."
+    },
+    {
+      "id": "budget_002",
+      "category": "budget",
+      "query": "Show me sarees under 4000.",
+      "expects_tool_call": true,
+      "expected_tool": "recommend_products",
+      "expected_constraints": {"max_price": 4000},
+      "notes": "Matches EVAL-0003, EVAL-0006."
+    },
+    {
+      "id": "budget_003",
+      "category": "budget",
+      "query": "What's the most affordable saree you have?",
+      "expects_tool_call": true,
+      "expected_tool": "recommend_products",
+      "expected_constraints": null,
+      "capability_gap": true,
+      "notes": "No tool supports a 'cheapest' query directly; the agent must fetch a list and pick the minimum itself. Cheapest available is EVAL-0006 at 2600."
+    },
+    {
+      "id": "budget_004",
+      "category": "budget",
+      "query": "Do you have something between 3000 and 5000 rupees?",
+      "expects_tool_call": true,
+      "expected_tool": "recommend_products",
+      "expected_constraints": {"max_price": 5000},
+      "capability_gap": true,
+      "notes": "No tool exposes a min_price argument (only max_price), so the lower bound cannot be graded; only max_price=5000 is checked."
+    },
+    {
+      "id": "availability_001",
+      "category": "availability",
+      "query": "Is the Rudraksha Bandha silk saree in stock?",
+      "expects_tool_call": true,
+      "expected_tool": ["search_products", "recommend_products"],
+      "expected_constraints": {"bandha_type": "Rudraksha Bandha"},
+      "notes": "EVAL-0007 is SOLD. Both tools default to in_stock_only=True, so the correct call should come back with zero results rather than describing the sold item."
+    },
+    {
+      "id": "availability_002",
+      "category": "availability",
+      "query": "Do you have any pink sarees available right now?",
+      "expects_tool_call": true,
+      "expected_tool": ["search_products", "recommend_products"],
+      "expected_constraints": {"color": "Pink"},
+      "notes": "EVAL-0008 is RESERVED, not AVAILABLE, so this should also come back empty."
+    },
+    {
+      "id": "availability_003",
+      "category": "availability",
+      "query": "What sarees do you currently have in stock for a wedding?",
+      "expects_tool_call": true,
+      "expected_tool": ["search_products", "recommend_products"],
+      "expected_constraints": {"occasion": "Wedding"},
+      "notes": "Should surface EVAL-0001 and EVAL-0004; EVAL-0007 is sold and must not appear."
+    },
+    {
+      "id": "detail_001",
+      "category": "product_detail",
+      "query": "Tell me more about EVAL-0001.",
+      "expects_tool_call": true,
+      "expected_tool": "get_product_details",
+      "expected_constraints": {"sku": "EVAL-0001"},
+      "notes": "Direct SKU lookup."
+    },
+    {
+      "id": "detail_002",
+      "category": "product_detail",
+      "query": "What's the price of EVAL-0004?",
+      "expects_tool_call": true,
+      "expected_tool": "get_product_details",
+      "expected_constraints": {"sku": "EVAL-0004"},
+      "notes": "Direct SKU lookup; price is 9500 INR."
+    },
+    {
+      "id": "detail_003",
+      "category": "product_detail",
+      "query": "Can you give me details on the Ivory Silk Pasapalli Wedding Saree?",
+      "expects_tool_call": true,
+      "expected_tool": ["search_products", "recommend_products", "get_product_details"],
+      "expected_constraints": null,
+      "capability_gap": true,
+      "notes": "get_product_details only accepts an exact SKU, not a product name, so the agent likely needs to search first to resolve EVAL-0004 before (or instead of) requesting details."
+    },
+    {
+      "id": "detail_004",
+      "category": "product_detail",
+      "query": "Do you have any info on a saree called EVAL-0007?",
+      "expects_tool_call": true,
+      "expected_tool": "get_product_details",
+      "expected_constraints": {"sku": "EVAL-0007"},
+      "notes": "get_product_details filters on product status=ACTIVE only, not inventory status, so it should still return EVAL-0007's details even though it is sold."
+    },
+    {
+      "id": "recommend_001",
+      "category": "recommendation",
+      "query": "Can you recommend a saree for my sister's wedding? She likes maroon.",
+      "expects_tool_call": true,
+      "expected_tool": "recommend_products",
+      "expected_constraints": {"color": "Maroon", "occasion": "Wedding"},
+      "notes": "Best in-stock match is EVAL-0001; EVAL-0007 also matches attributes but is sold."
+    },
+    {
+      "id": "recommend_002",
+      "category": "recommendation",
+      "query": "What would you suggest for a festival? My budget is 4500.",
+      "expects_tool_call": true,
+      "expected_tool": "recommend_products",
+      "expected_constraints": {"occasion": "Festival", "max_price": 4500},
+      "notes": "Matches EVAL-0003 and EVAL-0005 within budget."
+    },
+    {
+      "id": "recommend_003",
+      "category": "recommendation",
+      "query": "Recommend something silk for a wedding, under 10000.",
+      "expects_tool_call": true,
+      "expected_tool": "recommend_products",
+      "expected_constraints": {"fabric": "Silk", "occasion": "Wedding", "max_price": 10000},
+      "notes": "Matches EVAL-0004 (9500, available); EVAL-0007 (12000) is over budget and sold."
+    },
+    {
+      "id": "ambiguous_001",
+      "category": "ambiguous",
+      "query": "Hi",
+      "expects_tool_call": false,
+      "expected_tool": null,
+      "expected_constraints": null,
+      "notes": "Plain greeting, no product intent yet. Soft expectation, not a strict requirement."
+    },
+    {
+      "id": "ambiguous_002",
+      "category": "ambiguous",
+      "query": "Can you help me?",
+      "expects_tool_call": false,
+      "expected_tool": null,
+      "expected_constraints": null,
+      "notes": "No concrete product criteria given yet. Soft expectation."
+    },
+    {
+      "id": "ambiguous_003",
+      "category": "ambiguous",
+      "query": "I want something nice.",
+      "expects_tool_call": false,
+      "expected_tool": null,
+      "expected_constraints": null,
+      "notes": "Genuinely underspecified; ideally the agent asks a clarifying question instead of guessing. Interpret this category's accuracy qualitatively."
+    },
+    {
+      "id": "multi_001",
+      "category": "multi_constraint",
+      "query": "I want a maroon silk saree for a wedding, budget 12000.",
+      "expects_tool_call": true,
+      "expected_tool": "recommend_products",
+      "expected_constraints": {"color": "Maroon", "fabric": "Silk", "occasion": "Wedding", "max_price": 12000},
+      "notes": "Matches EVAL-0007 exactly on attributes, but it is sold, so the in-stock result should be empty."
+    },
+    {
+      "id": "multi_002",
+      "category": "multi_constraint",
+      "query": "Show me cotton festival sarees with 100 thread count.",
+      "expects_tool_call": true,
+      "expected_tool": ["search_products", "recommend_products"],
+      "expected_constraints": {"fabric": "Cotton", "occasion": "Festival", "thread_count": 100},
+      "notes": "Matches EVAL-0002 (available) and EVAL-0008 (reserved)."
+    },
+    {
+      "id": "multi_003",
+      "category": "multi_constraint",
+      "query": "I need a casual blue cotton saree.",
+      "expects_tool_call": true,
+      "expected_tool": ["search_products", "recommend_products"],
+      "expected_constraints": {"color": "Blue", "fabric": "Cotton", "occasion": "Casual"},
+      "notes": "Matches EVAL-0006 exactly."
+    },
+    {
+      "id": "multi_004",
+      "category": "multi_constraint",
+      "query": "Find me a Traditional Bandha saree in black for a festival, under 6000.",
+      "expects_tool_call": true,
+      "expected_tool": "recommend_products",
+      "expected_constraints": {"bandha_type": "Traditional Bandha", "color": "Black", "occasion": "Festival", "max_price": 6000},
+      "notes": "Matches EVAL-0002 exactly (5200, available)."
+    },
+    {
+      "id": "followup_001",
+      "category": "conversational_followup",
+      "turns": ["Do you have any wedding sarees?", "What's the price of the first one?"],
+      "expects_tool_call": true,
+      "expected_tool": ["get_product_details", "search_products", "recommend_products"],
+      "expected_constraints": null,
+      "notes": "Tests whether the agent carries SKU context from turn 1 into a follow-up. Which SKU 'the first one' refers to depends on the model's own earlier ordering, so exact arguments are not graded."
+    },
+    {
+      "id": "followup_002",
+      "category": "conversational_followup",
+      "turns": ["I like maroon sarees.", "Do you have anything silk in that color?"],
+      "expects_tool_call": true,
+      "expected_tool": ["search_products", "recommend_products"],
+      "expected_constraints": {"color": "Maroon", "fabric": "Silk"},
+      "notes": "Tests whether color preference from turn 1 carries into turn 2's tool call alongside the new fabric constraint."
+    },
+    {
+      "id": "followup_003",
+      "category": "conversational_followup",
+      "turns": ["Show me festival sarees.", "Which of these is cheapest?"],
+      "expects_tool_call": false,
+      "expected_tool": null,
+      "expected_constraints": null,
+      "notes": "Ideal behavior reuses the product list and prices already returned in turn 1 rather than calling a tool again. Soft expectation, since recommend_products also with max reasoning is a defensible alternative."
+    }
+  ]
+}

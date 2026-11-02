@@ -1,6 +1,8 @@
 -- MTP Phase 1 seed data: 3 sample sarees with private prices and one
 -- physical inventory piece each. Safe to run multiple times: every
 -- insert conflicts on an existing unique key and does nothing on repeat.
+-- Products start as DRAFT, so they stay out of the public catalog and the
+-- agent's search until someone deliberately publishes them.
 
 INSERT INTO catalog.products
 (
@@ -39,7 +41,7 @@ VALUES
     TRUE,
     'Sambalpur, Odisha',
     'Wedding',
-    'ACTIVE',
+    'DRAFT',
     'maroon-traditional-sambalpuri-saree'
 ),
 (
@@ -58,7 +60,7 @@ VALUES
     TRUE,
     'Sambalpur, Odisha',
     'Festival',
-    'ACTIVE',
+    'DRAFT',
     'black-red-sambalpuri-saree'
 ),
 (
@@ -77,7 +79,7 @@ VALUES
     TRUE,
     'Sambalpur, Odisha',
     'Festival',
-    'ACTIVE',
+    'DRAFT',
     'green-sambalpuri-saree'
 )
 ON CONFLICT (sku) DO NOTHING;

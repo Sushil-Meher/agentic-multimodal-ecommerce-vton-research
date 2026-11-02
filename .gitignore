@@ -41,3 +41,7 @@ checkpoints/
 
 # Docker volumes
 .pgdata/
+
+# Evaluation run outputs (regenerable, not source)
+experiments/results/*.json
+!experiments/results/.gitkeep

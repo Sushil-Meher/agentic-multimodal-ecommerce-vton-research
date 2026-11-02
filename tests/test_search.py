@@ -96,6 +96,30 @@ def test_include_price_false_excludes_price_field(product_factory):
     assert "price" not in result
 
 
+def test_eval_fixture_excluded_by_default(product_factory):
+    sku = product_factory(
+        status="ACTIVE", price=1000, inventory_status="AVAILABLE",
+        sku="EVAL-TEST-0001", primary_color="Maroon",
+    )
+
+    with engine.connect() as conn:
+        results = search_products(conn, color="Maroon")
+
+    assert sku not in [r["sku"] for r in results]
+
+
+def test_eval_fixture_included_when_requested(product_factory):
+    sku = product_factory(
+        status="ACTIVE", price=1000, inventory_status="AVAILABLE",
+        sku="EVAL-TEST-0002", primary_color="Maroon",
+    )
+
+    with engine.connect() as conn:
+        results = search_products(conn, color="Maroon", include_eval_fixtures=True)
+
+    assert sku in [r["sku"] for r in results]
+
+
 def test_include_price_true_returns_price_field(product_factory):
     sku = product_factory(price=1000, inventory_status="AVAILABLE")
 
