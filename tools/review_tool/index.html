@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Saree review</title>
+<style>
+  :root { --bg:#f6f5f2; --card:#fff; --ink:#1d1d1b; --muted:#6b6a66; --line:#dcdad4; --accent:#7a1f2b; --ok:#2e7d4f; --warn:#b7791f; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#17171a; --card:#222226; --ink:#eeeceb; --muted:#9a9894; --line:#37373c; --accent:#e08a97; --ok:#6cc08b; --warn:#e0b060; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.45 system-ui, sans-serif; }
+  header { padding:10px 16px; border-bottom:1px solid var(--line); display:flex; gap:16px; align-items:baseline; }
+  header h1 { font-size:17px; margin:0; } header span { color:var(--muted); }
+  .layout { display:grid; grid-template-columns:190px 1fr; min-height:calc(100vh - 46px); }
+  nav { border-right:1px solid var(--line); padding:8px; overflow:auto; max-height:calc(100vh - 46px); position:sticky; top:0; }
+  nav button { display:flex; width:100%; justify-content:space-between; background:none; border:0; color:inherit; padding:6px 8px; border-radius:6px; cursor:pointer; font:inherit; }
+  nav button:hover, nav button.on { background:var(--card); outline:1px solid var(--line); }
+  .dot { width:10px; height:10px; border-radius:50%; background:var(--line); align-self:center; }
+  .dot.verified { background:var(--ok); } .dot.uncertain { background:var(--warn); }
+  main { padding:16px; max-width:1100px; }
+  h2 { margin:0 0 4px; font-size:20px; } h3 { margin:18px 0 8px; font-size:15px; }
+  .muted { color:var(--muted); font-size:13px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr)); gap:10px; }
+  .shot { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:6px; }
+  .shot img { width:100%; height:130px; object-fit:contain; background:#0001; border-radius:4px; cursor:zoom-in; display:block; }
+  .shot div { font-size:12px; color:var(--muted); margin:4px 0 2px; }
+  select, input[type=text], textarea { font:inherit; color:inherit; background:var(--card); border:1px solid var(--line); border-radius:6px; padding:5px 8px; }
+  textarea { width:100%; min-height:64px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin-top:14px; }
+  .row { display:flex; flex-wrap:wrap; gap:14px; } .row label { display:flex; flex-direction:column; font-size:13px; color:var(--muted); gap:3px; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; margin:4px 0 8px; }
+  .chip { border:1px solid var(--line); border-radius:999px; padding:3px 11px; cursor:pointer; user-select:none; font-size:13px; }
+  .chip input { display:none; } .chip:has(input:checked) { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .add { display:inline-flex; gap:4px; } .add input { width:120px; padding:3px 8px; font-size:13px; }
+  button.btn { font:inherit; padding:7px 16px; border-radius:8px; border:1px solid var(--accent); background:var(--accent); color:#fff; cursor:pointer; }
+  button.btn.alt { background:none; color:var(--accent); }
+  .bar { position:sticky; bottom:0; background:var(--bg); padding:10px 0; display:flex; gap:12px; align-items:center; border-top:1px solid var(--line); margin-top:14px; }
+  .banner { background:#b7791f22; border:1px solid var(--warn); border-radius:8px; padding:8px 12px; margin-top:10px; font-size:13px; }
+  #lightbox { position:fixed; inset:0; background:#000d; display:none; align-items:center; justify-content:center; z-index:10; cursor:zoom-out; }
+  #lightbox img { max-width:96vw; max-height:96vh; }
+  @media (max-width:760px) { .layout { grid-template-columns:1fr; } nav { position:static; max-height:none; border-right:0; border-bottom:1px solid var(--line); } }
+</style>
+</head>
+<body>
+<header><h1>Saree review</h1><span id="progress"></span><span>local only · nothing leaves this computer</span></header>
+<div class="layout"><nav id="nav"></nav><main id="main"><p class="muted">Pick a saree on the left.</p></main></div>
+<div id="lightbox"><img id="big" alt=""></div>
+<script>
+const $ = (s, el = document) => el.querySelector(s);
+const GROUP_LABEL = { animals_birds: "Animals / birds", flowers_plants: "Flowers / plants", geometric: "Geometric", other: "Other" };
+const CLASS_LABEL = { body_pattern: "Body pattern", border_class: "Border", pallu_class: "Pallu" };
+let current = null, data = null;
+const esc = t => String(t).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+async function api(path, body) {
+  const opt = body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+  const r = await fetch(path, opt);
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || r.status);
+  return j;
+}
+
+async function loadNav() {
+  const list = await api("/api/sarees");
+  const done = list.filter(s => s.status === "verified").length;
+  $("#progress").textContent = `${done} / ${list.length} verified`;
+  $("#nav").innerHTML = list.map(s =>
+    `<button data-id="${s.saree_id}" class="${s.saree_id === current ? "on" : ""}"><span>${s.saree_id.slice(-4)} <span class="muted">(${s.images})</span></span><span class="dot ${s.status || ""}"></span></button>`).join("");
+  document.querySelectorAll("nav button").forEach(b => b.onclick = () => open(b.dataset.id));
+}
+
+function chips(name, options, selected) {
+  const all = [...options, ...selected.filter(x => !options.includes(x))];
+  return all.map(o => `<label class="chip"><input type="checkbox" name="${name}" value="${esc(o)}" ${selected.includes(o) ? "checked" : ""}>${esc(o)}</label>`).join("");
+}
+const picked = name => [...document.querySelectorAll(`input[name="${name}"]:checked`)].map(i => i.value);
+
+function colourInput(id, value) {
+  return `<input type="text" id="${id}" list="dl_colours" autocomplete="off" placeholder="type or pick" value="${esc(value === "not_sure" ? "not sure" : value)}">`;
+}
+function colourList() {
+  return `<datalist id="dl_colours"><option value="not sure">${data.vocabulary.colours.map(c => `<option value="${esc(c)}">`).join("")}</datalist>`;
+}
+
+function motifBlock(prefix, title, motifs) {
+  return `<h3>${title}</h3>` + Object.keys(GROUP_LABEL).map(g => `
+    <div class="muted">${GROUP_LABEL[g]}</div>
+    <div class="chips" id="${prefix}_${g}_chips">${chips(`${prefix}_${g}`, data.vocabulary[g], motifs[g] || [])}
+      <span class="add"><input type="text" placeholder="add word" data-group="${g}" data-prefix="${prefix}"><button class="btn alt" type="button" data-add="${g}" data-prefix="${prefix}">+</button></span></div>`).join("");
+}
+
+async function open(id) {
+  current = id;
+  data = await api(`/api/saree/${id}`);
+  const rec = data.record, cand = data.candidate;
+  const src = rec || (cand ? { observable: cand.observable, verification: { status: "" } } : null);
+  const obs = (src && src.observable) || { body_other_colours: [], body_motifs: {}, pallu_motifs: {} };
+  const cls = (rec && rec.traditional_classification) || {};
+  $("#main").innerHTML = `
+    <h2>${id}</h2>
+    <div class="muted">${data.images.length} photos · ${rec ? `saved ${rec.verification.reviewed_at.slice(0, 10)} (${rec.verification.status})` : "not reviewed yet"}</div>
+    ${!rec && cand ? '<div class="banner">Fields below are pre-filled from a model proposal. Check every one before saving.</div>' : ""}
+    <h3>Photos <span class="muted">(click to enlarge; fix the type if it is wrong)</span></h3>
+    <div class="grid">${data.images.map(im => `<div class="shot"><img src="/img/${im.image_id}?w=480" data-id="${im.image_id}" loading="lazy" alt="">
+      <div>${im.image_id}</div>
+      <select data-img="${im.image_id}" data-audit="${im.audit_type}">${data.image_types.map(t => `<option ${t === im.image_type ? "selected" : ""}>${t}</option>`).join("")}</select></div>`).join("")}</div>
+    <div class="card">
+      <h3 style="margin-top:0">Colours</h3>
+      <div class="row">
+        <label>Body (main colour)${colourInput("body_colour", obs.body_colour || "")}</label>
+        <label>Border${colourInput("border_colour", obs.border_colour || "")}</label>
+        <label>Pallu${colourInput("pallu_colour", obs.pallu_colour || "")}</label>
+      </div>
+      ${colourList()}
+      <div class="muted" style="margin-top:6px">Type any colour name (for example "deep green") or pick one. New names are remembered.</div>
+      <h3>Other colours in the body</h3>
+      <div id="bo_box"></div>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">Blouse</h3>
+      <div class="chips">${[["plain", "plain"], ["blouse_work", "blouse work"], ["no_blouse", "no blouse"]].map(([v, t]) =>
+        `<label class="chip"><input type="radio" name="blouse" value="${v}" ${(obs.blouse || "plain") === v ? "checked" : ""}>${t}</label>`).join("")}</div>
+    </div>
+    <div class="card" id="bm_card"></div>
+    <div class="card" id="pm_card"></div>
+    <div class="card">
+      <h3 style="margin-top:0">Your Sambalpuri labels <span class="muted">(optional; leave empty if not assessed)</span></h3>
+      <div class="row">${data.classification_fields.map(f => `<label>${CLASS_LABEL[f]}<input type="text" id="cls_${f}" list="dl_${f}" autocomplete="off" value="${esc((cls[f] && cls[f].human_label) || "")}"><datalist id="dl_${f}">${(data.label_options[f] || []).map(o => `<option value="${esc(o)}">`).join("")}</datalist></label>`).join("")}</div>
+      <div class="muted" style="margin-top:6px">Type your own name. Names you have already used on other sarees appear as suggestions.</div>
+      <h3>Notes</h3><textarea id="notes">${esc((rec && rec.notes) || "")}</textarea>
+    </div>
+    <div class="bar">
+      <label><input type="radio" name="status" value="verified" ${rec && rec.verification.status === "uncertain" ? "" : "checked"}> verified</label>
+      <label><input type="radio" name="status" value="uncertain" ${rec && rec.verification.status === "uncertain" ? "checked" : ""}> not sure, revisit later</label>
+      <button class="btn" id="save">Save</button><span id="msg" class="muted"></span>
+    </div>`;
+  renderMotifs(obs.body_motifs || {}, obs.pallu_motifs || {}, obs.body_other_colours || []);
+  document.querySelectorAll(".shot img").forEach(i => i.onclick = () => { $("#big").src = `/img/${i.dataset.id}?w=2000`; $("#lightbox").style.display = "flex"; });
+  $("#save").onclick = save;
+  loadNav();
+}
+
+function renderMotifs(body, pallu, other) {
+  $("#bo_box").innerHTML = `<div class="chips" id="bo_colours_chips">${chips("bo_colours", data.vocabulary.colours, other)}
+    <span class="add"><input type="text" placeholder="add colour" data-group="colours" data-prefix="bo"><button class="btn alt" type="button" data-add="colours" data-prefix="bo">+</button></span></div>`;
+  $("#bm_card").innerHTML = motifBlock("bm", "Body motifs", body);
+  $("#pm_card").innerHTML = motifBlock("pm", "Pallu motifs", pallu);
+  document.querySelectorAll("button[data-add]").forEach(b => b.onclick = addTerm);
+  document.querySelectorAll(".add input").forEach(i => i.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); i.nextElementSibling.click(); } });
+}
+
+async function addTerm(e) {
+  const group = e.target.dataset.add, prefix = e.target.dataset.prefix;
+  const term = e.target.previousElementSibling.value.trim();
+  if (!term) return;
+  try {
+    const kept = { bm: collect("bm"), pm: collect("pm"), bo: picked("bo_colours") };
+    data.vocabulary = await api("/api/vocab", { group, term });
+    if (prefix === "bo") kept.bo.push(term.toLowerCase()); else kept[prefix][group].push(term);
+    renderMotifs(kept.bm, kept.pm, kept.bo);
+    $("#dl_colours").outerHTML = colourList();
+  } catch (err) { $("#msg").textContent = err.message; }
+}
+
+const collect = p => Object.fromEntries(Object.keys(GROUP_LABEL).map(g => [g, picked(`${p}_${g}`)]));
+
+async function save() {
+  const corrections = {};
+  document.querySelectorAll("select[data-img]").forEach(s => { if (s.value !== s.dataset.audit) corrections[s.dataset.img] = s.value; });
+  const payload = {
+    status: $('input[name="status"]:checked').value,
+    observable: { body_colour: $("#body_colour").value, border_colour: $("#border_colour").value, pallu_colour: $("#pallu_colour").value,
+      blouse: $('input[name="blouse"]:checked').value,
+      body_other_colours: picked("bo_colours"), body_motifs: collect("bm"), pallu_motifs: collect("pm") },
+    image_type_corrections: corrections,
+    classification: Object.fromEntries(data.classification_fields.map(f => [f, $(`#cls_${f}`).value])),
+    notes: $("#notes").value,
+  };
+  try {
+    await api(`/api/saree/${current}`, payload);
+    $("#msg").textContent = "saved " + new Date().toLocaleTimeString();
+    ["body_colour", "border_colour", "pallu_colour"].forEach(id => {
+      const c = $("#" + id).value.trim().toLowerCase();
+      if (c && c !== "not sure" && !data.vocabulary.colours.includes(c)) data.vocabulary.colours.push(c);
+    });
+    $("#dl_colours").outerHTML = colourList();
+    loadNav();
+  } catch (err) { $("#msg").textContent = "not saved: " + err.message; }
+}
+
+$("#lightbox").onclick = () => $("#lightbox").style.display = "none";
+document.addEventListener("keydown", e => { if (e.key === "Escape") $("#lightbox").style.display = "none"; });
+loadNav();
+</script>
+</body>
+</html>

@@ -9,6 +9,8 @@ from langchain_core.tools import tool
 from pydantic import Field
 
 from ..api.db import engine
+from ..retrieval.search import EmbeddingServiceError
+from ..retrieval.search import search_by_image as search_by_image_service
 from ..search.details import get_product_details as get_product_details_service
 from ..search.products import search_products as search_products_service
 from ..search.recommend import recommend_products as recommend_products_service
@@ -30,6 +32,11 @@ def _include_eval_fixtures() -> bool:
     # the evaluation harness sets this so its own EVAL-* fixture catalog is
     # reachable through the real tools; real customers never set it
     return os.getenv("AGENT_INCLUDE_EVAL_FIXTURES") == "1"
+
+
+def _include_draft() -> bool:
+    # development only: lets the unpublished (DRAFT) catalog be searched while it is being tested
+    return os.getenv("AGENT_INCLUDE_DRAFT") == "1"
 
 
 # Optional filters use plain types with "" / 0 as "not given" instead of
@@ -59,6 +66,42 @@ MaxPrice = Annotated[
 ]
 
 
+MinPrice = Annotated[
+    float,
+    Field(description="Lowest price in rupees when the customer gives a range. Omit otherwise."),
+]
+Colors = Annotated[
+    str,
+    Field(
+        description="Colour(s) the customer wants, e.g. 'red' or 'red and black'. One colour means the "
+        "main body colour; with two colours both may be in the body, or one in the body and one in the "
+        "border. Omit if no colour was mentioned."
+    ),
+]
+Blouse = Annotated[
+    str,
+    Field(description="Blouse type: 'plain', 'blouse work' or 'no blouse'. Omit if not mentioned."),
+]
+Design = Annotated[
+    str,
+    Field(
+        description="Pattern, motif or design words the customer asked for, such as 'milan', 'peacock', "
+        "'teracotta' or 'bandha paper'. Separate several with 'and'. Omit if not mentioned."
+    ),
+]
+Region = Annotated[
+    str,
+    Field(
+        description="Only if the customer says where the design is: 'body', 'border' or 'pallu'. "
+        "Omit otherwise."
+    ),
+]
+ImageName = Annotated[
+    str,
+    Field(description="File name of the photo the customer uploaded, exactly as given to you."),
+]
+
+
 def _unset(value):
     # a model may still send "" or 0 for an argument it should have omitted
     if isinstance(value, str):
@@ -73,27 +116,71 @@ def search_products(
     thread_count: ThreadCount = 0,
     occasion: Occasion = "",
     fabric: Fabric = "",
+    min_price: MinPrice = 0,
+    max_price: MaxPrice = 0,
+    colors: Colors = "",
+    blouse: Blouse = "",
+    design: Design = "",
+    region: Region = "",
 ) -> str:
-    """Search the in-stock saree catalog by color, bandha type, thread count,
+    """Search the in-stock saree catalog by price range, colour(s), blouse
+    type, design words (pattern or motif), region, bandha type, thread count,
     occasion, or fabric. Returns matching products as a JSON list, including
     price. Pass only the filters the customer stated; call with no arguments
-    to list everything in stock."""
+    to list everything in stock. When a result has colour_match "weaker",
+    tell the customer honestly using its colour_note."""
     with engine.connect() as conn:
         try:
             results = search_products_service(
                 conn,
-                color=_unset(color),
+                min_price=_unset(min_price),
+                max_price=_unset(max_price),
+                colors=_unset(colors) or _unset(color),
                 bandha_type=_unset(bandha_type),
                 thread_count=_unset(thread_count),
                 occasion=_unset(occasion),
                 fabric=_unset(fabric),
+                blouse=_unset(blouse),
+                design=_unset(design),
+                region=_unset(region),
                 in_stock_only=True,
                 include_price=True,
                 include_eval_fixtures=_include_eval_fixtures(),
+                include_draft=_include_draft(),
             )
         except ValueError as exc:
             return _to_json({"error": str(exc)})
     return _to_json([dict(row) for row in results])
+
+
+@tool
+def search_by_image(
+    image_name: ImageName,
+    min_price: MinPrice = 0,
+    max_price: MaxPrice = 0,
+    blouse: Blouse = "",
+) -> str:
+    """Find in-stock sarees that look like a photo the customer uploaded,
+    most similar first, with a similarity score and price. Use this when the
+    customer sends a picture. Optionally keep only a price range or blouse
+    type the customer also stated."""
+    with engine.connect() as conn:
+        try:
+            results = search_by_image_service(
+                conn,
+                image_name,
+                limit=5,
+                min_price=_unset(min_price),
+                max_price=_unset(max_price),
+                blouse=_unset(blouse),
+                include_eval_fixtures=_include_eval_fixtures(),
+                include_draft=_include_draft(),
+            )
+        except ValueError as exc:
+            return _to_json({"error": str(exc)})
+        except EmbeddingServiceError as exc:
+            return _to_json({"error": str(exc)})
+    return _to_json(results)
 
 
 @tool
@@ -123,6 +210,7 @@ def recommend_products(
                 limit=5,
                 include_price=True,
                 include_eval_fixtures=_include_eval_fixtures(),
+                include_draft=_include_draft(),
             )
         except ValueError as exc:
             return _to_json({"error": str(exc)})
@@ -138,11 +226,15 @@ def get_product_details(
     by SKU, for example after a search or recommendation result."""
     with engine.connect() as conn:
         result = get_product_details_service(
-            conn, sku, include_price=True, include_eval_fixtures=_include_eval_fixtures()
+            conn,
+            sku,
+            include_price=True,
+            include_eval_fixtures=_include_eval_fixtures(),
+            include_draft=_include_draft(),
         )
     if result is None:
         return _to_json({"error": f"no active product found for sku {sku}"})
     return _to_json(result)
 
 
-TOOLS = [search_products, recommend_products, get_product_details]
+TOOLS = [search_products, search_by_image, recommend_products, get_product_details]

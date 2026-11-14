@@ -1,6 +1,8 @@
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
+from .attributes import colour_match, design_clauses, normalise_blouse, normalise_region, parse_terms
+
 # evaluation-harness fixtures use this SKU prefix (see experiments/); never
 # real catalog products, so callers must opt in to see them
 EVAL_FIXTURE_SKU_PREFIX = "EVAL-"
@@ -35,10 +37,20 @@ def search_products(
     in_stock_only: bool = True,
     include_price: bool = True,
     include_eval_fixtures: bool = False,
+    colors: str | None = None,
+    blouse: str | None = None,
+    design: str | None = None,
+    region: str | None = None,
+    include_draft: bool = False,
 ) -> list[dict]:
     """Reusable product search. Meant to be called from the API layer today
     and directly from an agent tool later, so filters stay simple keyword
-    arguments rather than a request-shaped object."""
+    arguments rather than a request-shaped object.
+
+    colors: free text such as "red" or "red and black" (see attributes.colour_match);
+    blouse: plain / blouse work / no blouse; design: one or more words matched
+    against pattern labels and motifs; region: body / border / pallu, narrows design.
+    include_draft is for development only (unpublished sarees)."""
 
     if max_price is not None and max_price < 0:
         raise ValueError("max_price must be >= 0")
@@ -49,7 +61,12 @@ def search_products(
     if thread_count is not None and thread_count <= 0:
         raise ValueError("thread_count must be > 0")
 
-    clauses = ["p.status = 'ACTIVE'"]
+    wanted_colors = parse_terms(colors)
+    designs = parse_terms(design)
+    blouse = normalise_blouse(blouse) if blouse else None
+    region = normalise_region(region) if region else None
+
+    clauses = ["p.status IN ('ACTIVE', 'DRAFT')" if include_draft else "p.status = 'ACTIVE'"]
     params: dict[str, object] = {}
 
     if max_price is not None:
@@ -73,6 +90,13 @@ def search_products(
     if fabric:
         clauses.append("p.fabric ILIKE :fabric")
         params["fabric"] = fabric
+    if blouse:
+        clauses.append(
+            "EXISTS (SELECT 1 FROM catalog.product_attributes b WHERE b.product_id = p.id "
+            "AND b.attribute = 'blouse' AND b.value = :blouse)"
+        )
+        params["blouse"] = blouse
+    clauses += design_clauses(designs, region, params)
     if in_stock_only:
         clauses.append(_AVAILABLE_EXISTS)
     if not include_eval_fixtures:
@@ -80,6 +104,9 @@ def search_products(
         params["eval_prefix"] = f"{EVAL_FIXTURE_SKU_PREFIX}%"
 
     columns = _BASE_COLUMNS + (", pr.price, pr.currency" if include_price else "")
+    if wanted_colors:
+        columns += """, COALESCE((SELECT array_agg(c.value) FROM catalog.product_attributes c
+                         WHERE c.product_id = p.id AND c.attribute = 'colour_other'), '{}') AS body_other_colours"""
 
     # current price is joined even when not selected, so a product with no
     # price yet (not really for sale) doesn't show up in search results
@@ -91,4 +118,16 @@ def search_products(
         ORDER BY p.created_at DESC
     """
 
-    return conn.execute(text(query), params).mappings().all()
+    rows = conn.execute(text(query), params).mappings().all()
+    if not wanted_colors:
+        return rows
+
+    matched = []
+    for row in rows:
+        row = dict(row)
+        found = colour_match(row["primary_color"], row["secondary_color"], row.pop("body_other_colours"), wanted_colors)
+        if found:
+            row["colour_match"], row["colour_note"] = found
+            matched.append(row)
+    matched.sort(key=lambda r: r["colour_match"] != "best")  # stable: best matches first
+    return matched

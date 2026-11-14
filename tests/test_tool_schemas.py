@@ -29,7 +29,7 @@ def sent_tools():
 def test_every_parameter_sent_to_ollama_has_a_type_and_description(sent_tools):
     # regression: anyOf/null used to be dropped by the Ollama client, so the
     # model saw every optional parameter as a blank {}
-    assert set(sent_tools) == {"search_products", "recommend_products", "get_product_details"}
+    assert set(sent_tools) == {"search_products", "search_by_image", "recommend_products", "get_product_details"}
     for tool_name, params in sent_tools.items():
         for prop_name, prop in params["properties"].items():
             assert prop.get("type"), f"{tool_name}.{prop_name} has no type"

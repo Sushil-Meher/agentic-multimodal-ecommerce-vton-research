@@ -198,7 +198,7 @@ def test_agent_tool_includes_eval_fixture_when_enabled(product_factory, monkeypa
 
 def test_tool_list_has_no_raw_sql_tool():
     names = {t.name for t in TOOLS}
-    assert names == {"search_products", "recommend_products", "get_product_details"}
+    assert names == {"search_products", "search_by_image", "recommend_products", "get_product_details"}
 
 
 def test_search_tool_is_immune_to_sql_injection_in_arguments():

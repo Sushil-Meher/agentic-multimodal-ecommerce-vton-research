@@ -364,6 +364,28 @@ CREATE INDEX IF NOT EXISTS ix_product_embeddings_hnsw
     ON catalog.product_embeddings USING hnsw (embedding vector_cosine_ops);
 
 -- =========================
+-- PRODUCT ATTRIBUTES
+-- =========================
+-- One row per verified fact about a product (colour, motif, label, blouse), so
+-- multi-valued attributes and new garment types need no new columns.
+--   attribute: colour | colour_other | motif | label | blouse
+--   region:    whole | body | border | pallu | blouse
+--   detail:    optional sub-type, e.g. the motif group (animals_birds, flowers_plants...)
+CREATE TABLE IF NOT EXISTS catalog.product_attributes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    product_id UUID NOT NULL REFERENCES catalog.products(id) ON DELETE CASCADE,
+    attribute TEXT NOT NULL,
+    value TEXT NOT NULL,
+    region TEXT NOT NULL DEFAULT 'whole' CHECK (region IN ('whole', 'body', 'border', 'pallu', 'blouse')),
+    detail TEXT,
+    source TEXT NOT NULL DEFAULT 'human_verified',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (product_id, attribute, region, value)
+);
+CREATE INDEX IF NOT EXISTS ix_product_attributes_lookup
+    ON catalog.product_attributes (attribute, region, lower(value));
+
+-- =========================
 -- PUBLIC CATALOG VIEW
 -- =========================
 -- Intentionally excludes internal price and inventory data.
@@ -393,6 +415,11 @@ SELECT
 FROM catalog.products p
 WHERE p.status = 'ACTIVE'
   AND p.sku NOT LIKE 'EVAL-%'; -- evaluation-harness fixtures aren't real catalog products
+
+CREATE OR REPLACE VIEW catalog.public_product_attributes AS
+SELECT a.product_id, a.attribute, a.value, a.region, a.detail
+FROM catalog.product_attributes a
+JOIN catalog.public_products p ON p.id = a.product_id;
 
 -- =========================
 -- SECURITY NOTES
