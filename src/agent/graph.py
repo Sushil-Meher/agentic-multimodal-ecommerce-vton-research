@@ -17,6 +17,8 @@ SYSTEM_PROMPT = (
     "that came from a tool result, never invent them. Keep answers short. "
     "Always run a search before saying you cannot find, filter or recognise something; "
     "never decide a word is unknown without searching for it first. "
+    "Search only for the colours and designs the customer named; never add other colours or "
+    "words to a search to widen it. If nothing matches, say so and offer to try something else. "
     "Refer to each saree by its name (for example BunkarHouse00017), never by SKU. "
     "If a customer asks for something the filters cannot express, say you cannot "
     "filter for that; never say none exist unless a search with the right filters "

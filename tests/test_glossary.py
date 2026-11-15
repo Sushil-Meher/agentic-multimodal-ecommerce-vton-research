@@ -33,3 +33,7 @@ def test_prompt_tells_the_agent_not_to_claim_none_exist_and_to_use_names():
 
 def test_prompt_requires_searching_before_saying_something_is_unknown():
     assert "Always run a search before" in graph.SYSTEM_PROMPT
+
+
+def test_prompt_forbids_widening_a_search_with_colours_the_customer_did_not_name():
+    assert "never add other colours" in graph.SYSTEM_PROMPT
