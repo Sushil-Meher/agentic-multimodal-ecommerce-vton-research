@@ -28,6 +28,7 @@ def main():
     parser.add_argument("--resume", action="store_true", help="continue an interrupted run of the same name")
     args = parser.parse_args()
 
+    os.environ.setdefault("AGENT_RESULT_LIMIT", "1000")  # no cap: the benchmark grades the full result set
     if args.real_catalog:
         os.environ["AGENT_INCLUDE_DRAFT"] = "1"  # unpublished sarees become searchable for this run
     else:

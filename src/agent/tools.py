@@ -123,6 +123,20 @@ _CUSTOMER_FIELDS = (
 )
 
 
+def _result_limit() -> int:
+    # an open question ("what do you have?") must not hand the model the whole catalog to write about
+    return int(os.getenv("AGENT_RESULT_LIMIT", "8"))
+
+
+def _capped(rows: list[dict]) -> list[dict]:
+    limit = _result_limit()
+    if len(rows) <= limit:
+        return rows
+    note = (f"{len(rows) - limit} more sarees match and are not shown. Show at most 5 and ask the "
+            "customer to narrow down by colour, price or design.")
+    return rows[:limit] + [{"note": note}]
+
+
 def _slim(row) -> dict:
     return {k: v for k, v in dict(row).items() if k in _CUSTOMER_FIELDS and v not in (None, "")}
 
@@ -179,7 +193,7 @@ def search_products(
             )
         except ValueError as exc:
             return _to_json({"error": str(exc)})
-    return _to_json([_slim(row) for row in results])
+    return _to_json(_capped([_slim(row) for row in results]))
 
 
 @tool

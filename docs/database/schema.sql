@@ -358,6 +358,9 @@ CREATE INDEX IF NOT EXISTS ix_orders_customer_created ON commerce.orders(custome
 CREATE INDEX IF NOT EXISTS ix_orders_status ON commerce.orders(status);
 CREATE INDEX IF NOT EXISTS ix_payments_order ON commerce.payments(order_id);
 CREATE INDEX IF NOT EXISTS ix_audit_entity ON auth.audit_logs(entity_type, entity_id, created_at DESC);
+-- WhatsApp retries webhooks, so the same incoming message id must never be stored twice
+CREATE UNIQUE INDEX IF NOT EXISTS ux_messages_whatsapp_message_id
+    ON ai.messages(whatsapp_message_id) WHERE whatsapp_message_id IS NOT NULL;
 
 -- Approximate nearest-neighbor index for pgvector. Tune after measuring data scale.
 CREATE INDEX IF NOT EXISTS ix_product_embeddings_hnsw
