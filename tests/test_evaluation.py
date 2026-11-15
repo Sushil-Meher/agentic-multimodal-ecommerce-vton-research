@@ -266,3 +266,97 @@ def test_compute_metrics_separates_capability_gap_cases():
 
 def test_compute_metrics_handles_empty_results():
     assert compute_metrics([]) == {"total_cases": 0}
+
+
+def _retrieval_case(relevant, **extra):
+    return BenchmarkCase(
+        id="r1", category="retrieval", turns=["show maroon"], expects_tool_call=True,
+        expected_tool="search_products", relevant_skus=relevant, **extra,
+    )
+
+
+def test_retrieval_scoring_exact_match_and_partial(product_factory):
+    maroon = product_factory(status="ACTIVE", price=1000, inventory_status="AVAILABLE", primary_color="Maroon")
+    blue = product_factory(status="ACTIVE", price=1000, inventory_status="AVAILABLE", primary_color="Blue")
+
+    def run(args):
+        llm = FakeLLM([_tool_call("search_products", args), AIMessage(content="done")])
+        return run_case(build_graph(llm=llm), _retrieval_case([maroon]))
+
+    exact = run({"colors": "maroon"})
+    assert exact.returned_skus == [maroon] and exact.retrieval_exact is True
+    assert exact.retrieval_precision == 1.0 and exact.retrieval_recall == 1.0
+
+    too_much = run({})  # no filter: returns every in-stock saree
+    assert maroon in too_much.returned_skus and blue in too_much.returned_skus
+    assert too_much.retrieval_recall == 1.0 and too_much.retrieval_precision < 1.0
+    assert too_much.retrieval_exact is False
+
+
+def test_retrieval_expecting_nothing_requires_a_search_that_finds_nothing():
+    case = _retrieval_case([])
+    found_nothing = FakeLLM([_tool_call("search_products", {"design": "no such design anywhere"}), AIMessage(content="none")])
+    r = run_case(build_graph(llm=found_nothing), case)
+    assert r.returned_skus == [] and r.retrieval_exact is True
+
+    never_searched = FakeLLM([AIMessage(content="I have nothing like that.")])
+    r = run_case(build_graph(llm=never_searched), case)
+    assert r.retrieval_exact is False  # an answer without searching must not count as correct
+
+
+def test_sku_prefix_ignores_unrelated_products(product_factory):
+    mine = product_factory(sku="PFX-ONE", status="ACTIVE", price=1000, inventory_status="AVAILABLE")
+    other = product_factory(sku="OTHER-ONE", status="ACTIVE", price=1000, inventory_status="AVAILABLE")
+    llm = FakeLLM([_tool_call("search_products", {}), AIMessage(content="ok")])
+    r = run_case(build_graph(llm=llm), _retrieval_case([mine], sku_prefix="PFX-"))
+    assert other not in r.returned_skus and r.returned_skus == [mine]
+    assert r.retrieval_exact is True
+
+
+def test_argument_aliases_and_retrieval_metrics_summary(product_factory):
+    sku = product_factory(status="ACTIVE", price=1000, inventory_status="AVAILABLE", primary_color="Maroon")
+    case = BenchmarkCase(
+        id="r2", category="retrieval", turns=["maroon"], expects_tool_call=True,
+        expected_tool="search_products", expected_constraints={"colors|color": "Maroon"}, relevant_skus=[sku],
+    )
+    llm = FakeLLM([_tool_call("search_products", {"color": "maroon"}), AIMessage(content="ok")])
+    r = run_case(build_graph(llm=llm), case)
+    assert r.argument_match_ratio == 1.0
+    summary = compute_metrics([r])["retrieval"]
+    assert summary["cases"] == 1 and summary["exact_set_match_rate"] == 1.0 and summary["failed_case_ids"] == []
+
+
+def test_progress_is_saved_after_each_case_and_resumes(tmp_path):
+    from src.evaluation.checkpoint import load_partial, save_partial
+    from src.evaluation.runner import run_benchmark
+
+    cases = [BenchmarkCase(id=f"c{i}", category="x", turns=["hi"], expects_tool_call=False) for i in range(3)]
+    path = tmp_path / "run_partial.json"
+    saved = []
+
+    def progress(results):
+        save_partial(path, "run", "bench.json", results)
+        saved.append(len(results))
+
+    first = run_benchmark(build_graph(llm=FakeLLM([AIMessage(content="a")] * 3)), cases, on_result=progress)
+    assert saved == [1, 2, 3] and len(first) == 3
+
+    # a run that died after two cases: only the third is computed again
+    save_partial(path, "run", "bench.json", first[:2])
+    done = load_partial(path, "bench.json")
+    assert set(done) == {"c0", "c1"}
+    llm = FakeLLM([AIMessage(content="only one call needed")])
+    resumed = run_benchmark(build_graph(llm=llm), cases, done=done)
+    assert [r.case_id for r in resumed] == ["c0", "c1", "c2"]
+    assert resumed[2].final_response == "only one call needed" and not llm._responses
+
+
+def test_partial_file_from_another_benchmark_or_corrupt_is_ignored(tmp_path):
+    from src.evaluation.checkpoint import load_partial, save_partial
+
+    path = tmp_path / "p.json"
+    save_partial(path, "run", "bench_a.json", [])
+    assert load_partial(path, "bench_b.json") == {}
+    path.write_text("{broken", encoding="utf-8")
+    assert load_partial(path, "bench_a.json") == {}
+    assert load_partial(tmp_path / "missing.json", "bench_a.json") == {}

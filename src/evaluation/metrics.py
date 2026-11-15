@@ -46,6 +46,18 @@ def compute_metrics(results: list[CaseResult]) -> dict:
                 "task_success_rate": mean(r.task_success for r in cat_results),
             }
 
+        retrieval = [r for r in graded if r.relevant_skus is not None]
+        if retrieval:
+            precisions = [r.retrieval_precision for r in retrieval if r.retrieval_precision is not None]
+            recalls = [r.retrieval_recall for r in retrieval if r.retrieval_recall is not None]
+            metrics["retrieval"] = {
+                "cases": len(retrieval),
+                "exact_set_match_rate": mean(bool(r.retrieval_exact) for r in retrieval),
+                "mean_precision": mean(precisions) if precisions else None,
+                "mean_recall": mean(recalls) if recalls else None,
+                "failed_case_ids": [r.case_id for r in retrieval if not r.retrieval_exact],
+            }
+
         metrics.update(
             {
                 "tool_selection_accuracy": mean(r.tool_selection_correct for r in graded),

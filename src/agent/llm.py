@@ -11,7 +11,14 @@ def get_llm():
     if provider == "ollama":
         from langchain_ollama import ChatOllama
 
-        return ChatOllama(model=model or "qwen3:8b", base_url=os.getenv("OLLAMA_BASE_URL"))
+        # a local model can fall into a repetition loop and generate for tens of minutes, so both the
+        # length of one reply and the wait for it are capped (a capped case is recorded as a failure)
+        return ChatOllama(
+            model=model or "qwen3:8b",
+            base_url=os.getenv("OLLAMA_BASE_URL"),
+            num_predict=int(os.getenv("OLLAMA_NUM_PREDICT", "3000")),
+            client_kwargs={"timeout": float(os.getenv("OLLAMA_TIMEOUT_SECONDS", "300"))},
+        )
 
     if provider == "openai":
         from langchain_openai import ChatOpenAI

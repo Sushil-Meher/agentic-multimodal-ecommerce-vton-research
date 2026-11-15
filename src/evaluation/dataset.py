@@ -13,6 +13,7 @@ class BenchmarkCase:
     expected_constraints: dict | None = None
     relevant_skus: list[str] | None = None  # reserved for future Precision/Recall/NDCG metrics
     capability_gap: bool = False  # tests a requirement no current tool can satisfy
+    sku_prefix: str | None = None  # only returned SKUs with this prefix count (ignores unrelated sample products)
     notes: str = ""
 
 
@@ -31,6 +32,7 @@ def load_benchmark(path: str | Path) -> list[BenchmarkCase]:
                 expected_constraints=item.get("expected_constraints"),
                 relevant_skus=item.get("relevant_skus"),
                 capability_gap=item.get("capability_gap", False),
+                sku_prefix=item.get("sku_prefix", data.get("sku_prefix")),
                 notes=item.get("notes", ""),
             )
         )

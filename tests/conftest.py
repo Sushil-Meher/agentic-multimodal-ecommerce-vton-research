@@ -77,3 +77,17 @@ def product_factory():
                 {"id": product_id},
             )
             conn.execute(text("DELETE FROM catalog.products WHERE id = :id"), {"id": product_id})
+
+
+@pytest.fixture(autouse=True)
+def _no_colour_families(monkeypatch, tmp_path):
+    """Tests must not depend on the owner's private colour-family file."""
+    from src.search import attributes
+
+    monkeypatch.setenv("COLOUR_FAMILIES_FILE", str(tmp_path / "none.json"))
+    monkeypatch.setenv("AGENT_GLOSSARY_FILE", str(tmp_path / "none_glossary.json"))
+    attributes._families.cache_clear()
+    attributes._glossary_groups.cache_clear()
+    yield
+    attributes._families.cache_clear()
+    attributes._glossary_groups.cache_clear()

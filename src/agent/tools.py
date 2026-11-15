@@ -75,7 +75,8 @@ Colors = Annotated[
     Field(
         description="Colour(s) the customer wants, e.g. 'red' or 'red and black'. One colour means the "
         "main body colour; with two colours both may be in the body, or one in the body and one in the "
-        "border. Omit if no colour was mentioned."
+        "border. Similar shades are included automatically (brown also finds coffee). Omit if no "
+        "colour was mentioned."
     ),
 ]
 Blouse = Annotated[
@@ -96,10 +97,34 @@ Region = Annotated[
         "Omit otherwise."
     ),
 ]
+BorderColor = Annotated[
+    str,
+    Field(
+        description="Colour of the border bands only, e.g. 'red'. Use when the customer asks about the "
+        "border colour; similar shades are included. Omit otherwise."
+    ),
+]
+PalluColor = Annotated[
+    str,
+    Field(description="Colour of the pallu (the decorated end piece) only. Omit if not mentioned."),
+]
 ImageName = Annotated[
     str,
     Field(description="File name of the photo the customer uploaded, exactly as given to you."),
 ]
+
+
+# the model only needs what a customer would be told; ids, slugs and timestamps just invite it to
+# paste raw tables into its answer and make every reply slower
+_CUSTOMER_FIELDS = (
+    "sku", "name", "price", "currency", "primary_color", "secondary_color", "border_type", "blouse_included",
+    "fabric", "occasion", "bandha_type", "thread_count", "motif", "colour_match", "colour_note",
+    "similarity", "score", "reason",
+)
+
+
+def _slim(row) -> dict:
+    return {k: v for k, v in dict(row).items() if k in _CUSTOMER_FIELDS and v not in (None, "")}
 
 
 def _unset(value):
@@ -122,10 +147,12 @@ def search_products(
     blouse: Blouse = "",
     design: Design = "",
     region: Region = "",
+    border_color: BorderColor = "",
+    pallu_color: PalluColor = "",
 ) -> str:
-    """Search the in-stock saree catalog by price range, colour(s), blouse
-    type, design words (pattern or motif), region, bandha type, thread count,
-    occasion, or fabric. Returns matching products as a JSON list, including
+    """Search the in-stock saree catalog by price range, colour(s), border
+    colour, pallu colour, blouse type, design words (pattern or motif),
+    region, bandha type, thread count, occasion, or fabric. Returns matching products as a JSON list, including
     price. Pass only the filters the customer stated; call with no arguments
     to list everything in stock. When a result has colour_match "weaker",
     tell the customer honestly using its colour_note."""
@@ -143,6 +170,8 @@ def search_products(
                 blouse=_unset(blouse),
                 design=_unset(design),
                 region=_unset(region),
+                border_color=_unset(border_color),
+                pallu_color=_unset(pallu_color),
                 in_stock_only=True,
                 include_price=True,
                 include_eval_fixtures=_include_eval_fixtures(),
@@ -150,7 +179,7 @@ def search_products(
             )
         except ValueError as exc:
             return _to_json({"error": str(exc)})
-    return _to_json([dict(row) for row in results])
+    return _to_json([_slim(row) for row in results])
 
 
 @tool
@@ -180,7 +209,7 @@ def search_by_image(
             return _to_json({"error": str(exc)})
         except EmbeddingServiceError as exc:
             return _to_json({"error": str(exc)})
-    return _to_json(results)
+    return _to_json([_slim(row) for row in results])
 
 
 @tool
@@ -214,7 +243,7 @@ def recommend_products(
             )
         except ValueError as exc:
             return _to_json({"error": str(exc)})
-    return _to_json(results)
+    return _to_json([_slim(row) for row in results])
 
 
 @tool
@@ -234,7 +263,7 @@ def get_product_details(
         )
     if result is None:
         return _to_json({"error": f"no active product found for sku {sku}"})
-    return _to_json(result)
+    return _to_json(_slim(result))
 
 
 TOOLS = [search_products, search_by_image, recommend_products, get_product_details]

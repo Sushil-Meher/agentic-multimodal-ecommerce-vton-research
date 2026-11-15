@@ -1,7 +1,16 @@
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
-from .attributes import colour_match, design_clauses, normalise_blouse, normalise_region, parse_terms
+from .attributes import (
+    colour_match,
+    design_clauses,
+    escape_like,
+    expand_colour,
+    is_literal,
+    normalise_blouse,
+    normalise_region,
+    parse_terms,
+)
 
 # evaluation-harness fixtures use this SKU prefix (see experiments/); never
 # real catalog products, so callers must opt in to see them
@@ -42,6 +51,8 @@ def search_products(
     design: str | None = None,
     region: str | None = None,
     include_draft: bool = False,
+    border_color: str | None = None,
+    pallu_color: str | None = None,
 ) -> list[dict]:
     """Reusable product search. Meant to be called from the API layer today
     and directly from an agent tool later, so filters stay simple keyword
@@ -49,7 +60,8 @@ def search_products(
 
     colors: free text such as "red" or "red and black" (see attributes.colour_match);
     blouse: plain / blouse work / no blouse; design: one or more words matched
-    against pattern labels and motifs; region: body / border / pallu, narrows design.
+    against pattern labels and motifs; region: body / border / pallu, narrows design;
+    border_color / pallu_color: colour of the border bands / the pallu (contains match).
     include_draft is for development only (unpublished sarees)."""
 
     if max_price is not None and max_price < 0:
@@ -90,6 +102,21 @@ def search_products(
     if fabric:
         clauses.append("p.fabric ILIKE :fabric")
         params["fabric"] = fabric
+    for i, word in enumerate(parse_terms(border_color)):
+        names = []
+        for j, term in enumerate(expand_colour(word)):  # similar shades count (brown also finds coffee)
+            names.append(f"p.secondary_color ILIKE :border{i}_{j} ESCAPE '\\'")
+            params[f"border{i}_{j}"] = f"%{escape_like(term)}%"
+        clauses.append("(" + " OR ".join(names) + ")")
+    for i, word in enumerate(parse_terms(pallu_color)):
+        names = []
+        for j, term in enumerate(expand_colour(word)):
+            names.append(f"pc.value ILIKE :pallu{i}_{j} ESCAPE '\\'")
+            params[f"pallu{i}_{j}"] = f"%{escape_like(term)}%"
+        clauses.append(
+            "EXISTS (SELECT 1 FROM catalog.product_attributes pc WHERE pc.product_id = p.id "
+            "AND pc.attribute = 'colour' AND pc.region = 'pallu' AND (" + " OR ".join(names) + "))"
+        )
     if blouse:
         clauses.append(
             "EXISTS (SELECT 1 FROM catalog.product_attributes b WHERE b.product_id = p.id "
@@ -125,9 +152,14 @@ def search_products(
     matched = []
     for row in rows:
         row = dict(row)
-        found = colour_match(row["primary_color"], row["secondary_color"], row.pop("body_other_colours"), wanted_colors)
+        other = row.pop("body_other_colours")
+        found = colour_match(row["primary_color"], row["secondary_color"], other, wanted_colors)
         if found:
             row["colour_match"], row["colour_note"] = found
+            row["_literal"] = is_literal(row["primary_color"], row["secondary_color"], other, wanted_colors)
             matched.append(row)
-    matched.sort(key=lambda r: r["colour_match"] != "best")  # stable: best matches first
+    # stable sorts: best tier first, and within a tier the exact colour before similar shades
+    matched.sort(key=lambda r: (r["colour_match"] != "best", not r["_literal"]))
+    for r in matched:
+        r.pop("_literal")
     return matched

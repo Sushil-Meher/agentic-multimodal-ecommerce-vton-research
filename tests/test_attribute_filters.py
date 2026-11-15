@@ -192,3 +192,121 @@ def test_photo_tool_reports_service_down(tmp_path, monkeypatch):
     monkeypatch.setattr(photo_search, "SERVICE_URL", "http://127.0.0.1:9")  # nothing listens here
     result = json.loads(search_by_image.invoke({"image_name": "a.jpg"}))
     assert "not running" in result["error"]
+
+
+def test_border_colour_filter(product_factory):
+    red_border = make(product_factory, primary_color="green", border="red")
+    gold_border = make(product_factory, primary_color="green", border="golden coffee")
+    found = skus(border_color="red")
+    assert red_border in found and gold_border not in found
+    assert gold_border in skus(border_color="Coffee")  # contains, any case
+    assert red_border in skus(colors="green", border_color="red")
+    assert gold_border not in skus(colors="green", border_color="red")
+
+
+def test_pallu_colour_filter(product_factory):
+    maroon_pallu = make(product_factory, primary_color="pink", attrs=[("colour", "maroon", "pallu")])
+    body_only = make(product_factory, primary_color="maroon", attrs=[("colour", "black", "pallu")])
+    found = skus(pallu_color="maroon")
+    assert maroon_pallu in found and body_only not in found  # a maroon BODY must not count as a maroon pallu
+
+
+def test_border_and_pallu_filters_through_the_tool(product_factory):
+    sku = make(product_factory, border="turquoise", attrs=[("colour", "plum", "pallu")])
+    assert sku in [p["sku"] for p in json.loads(search_products.invoke({"border_color": "turquoise"}))]
+    assert sku in [p["sku"] for p in json.loads(search_products.invoke({"pallu_color": "plum", "border_color": ""}))]
+
+
+def test_colour_filters_are_injection_safe():
+    for arg in ("border_color", "pallu_color"):
+        assert json.loads(search_products.invoke({arg: "x'; DROP TABLE catalog.products; --"})) == []
+
+
+@pytest.fixture
+def families(tmp_path, monkeypatch):
+    from src.search import attributes
+
+    path = tmp_path / "families.json"
+    path.write_text(json.dumps({"families": {"brown": ["brown", "coffee"]}}), encoding="utf-8")
+    monkeypatch.setenv("COLOUR_FAMILIES_FILE", str(path))
+    attributes._families.cache_clear()
+    yield
+    attributes._families.cache_clear()
+
+
+def test_expand_colour_with_families(families):
+    from src.search.attributes import expand_colour
+
+    assert expand_colour("brown") == ["brown", "coffee"]
+    assert expand_colour("deep brown") == ["deep brown", "brown", "coffee"]  # contains a family word
+    assert "brown" in expand_colour("dark coffee")
+    assert expand_colour("red") == ["red"]
+
+
+def test_no_families_file_means_plain_matching():
+    from src.search.attributes import expand_colour
+
+    assert expand_colour("brown") == ["brown"]  # the autouse fixture points at a missing file
+
+
+def test_similar_shade_matches_and_is_named_in_the_note(families):
+    tier, note = colour_match("coffee", None, [], ["brown"])
+    assert tier == "best" and note == "coffee (similar to brown) is the main body colour"
+    assert colour_match("brown", None, [], ["brown"])[1] == "brown is the main body colour"
+    assert colour_match("deep red", None, [], ["red"])[1] == "red is the main body colour"  # plain contains
+    tier, note = colour_match("pink", "golden coffee", [], ["pink", "brown"])
+    assert tier == "best" and note.endswith("golden coffee (similar to brown) in the border")
+
+
+def test_brown_requests_find_coffee_sarees_exact_first(product_factory, families):
+    coffee = make(product_factory, primary_color="coffee")
+    brown = make(product_factory, primary_color="brown")
+    deep = make(product_factory, primary_color="deep brown")
+    other = make(product_factory, primary_color="blue")
+    with engine.connect() as conn:
+        rows = [r["sku"] for r in search_service(conn, colors="brown") if r["sku"] in (coffee, brown, deep, other)]
+    assert set(rows) == {coffee, brown, deep}
+    assert rows.index(coffee) > rows.index(brown) and rows.index(coffee) > rows.index(deep)  # literal brown first
+
+
+def test_border_and_pallu_filters_use_families(product_factory, families):
+    coffee_border = make(product_factory, border="golden coffee", attrs=[("colour", "coffee", "pallu")])
+    red_border = make(product_factory, border="red")
+    assert coffee_border in skus(border_color="brown") and red_border not in skus(border_color="brown")
+    assert coffee_border in skus(pallu_color="deep brown")
+
+
+@pytest.fixture
+def glossary(tmp_path, monkeypatch):
+    from src.search import attributes
+
+    path = tmp_path / "glossary.json"
+    path.write_text(json.dumps({"terms": [{"term": "teracotta", "aliases": ["terracotta", "Terakota"], "meaning": "x"},
+                                           {"term": "milan", "meaning": "y"}]}), encoding="utf-8")
+    monkeypatch.setenv("AGENT_GLOSSARY_FILE", str(path))
+    attributes._glossary_groups.cache_clear()
+    yield
+    attributes._glossary_groups.cache_clear()
+
+
+def test_design_spelling_variants_find_the_owners_spelling(product_factory, glossary):
+    from src.search.attributes import expand_design
+
+    assert expand_design("terracotta") == ["teracotta", "terracotta", "terakota"]
+    assert expand_design("milan") == ["milan"] and expand_design("unlisted") == ["unlisted"]
+    sku = make(product_factory, attrs=[("label", "teracotta", "body")])
+    assert sku in skus(design="terracotta") and sku in skus(design="TERAKOTA") and sku in skus(design="teracotta")
+    assert sku not in skus(design="terracotta and peacock")  # every word must still match
+
+
+def test_without_a_glossary_spelling_must_match_literally(product_factory):
+    sku = make(product_factory, attrs=[("label", "teracotta", "body")])
+    assert sku not in skus(design="terracotta")
+
+
+def test_tool_results_leave_out_ids_and_internal_fields(product_factory):
+    sku = make(product_factory, primary_color="Teal", attrs=[("label", "slimcheck", "body")])
+    row = next(p for p in json.loads(search_products.invoke({"design": "slimcheck"})) if p["sku"] == sku)
+    for hidden in ("id", "public_slug", "created_at", "updated_at", "status", "description", "weight_grams"):
+        assert hidden not in row
+    assert row["name"] and row["price"] == 8000 and row["primary_color"] == "Teal" and row["blouse_included"] is False
